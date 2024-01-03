@@ -1,4 +1,5 @@
 import subprocess
+import shlex
 
 class Result:
 
@@ -16,37 +17,45 @@ class Result:
         else:
             return self.stdErr
 
+class x__command_failed_error(Exception):
+    pass
+
+
+def x__parameters__to__command__array(string):
+    commands = []
+
+    for part in string.split("|"):
+        commands.append(shlex.split(part))
+
+    return commands
+
 
 
 def x(command):
 
-    commandWithArguments = command
-
-    if isinstance(command, str):
-        commandWithArguments = command.split()
-
+    commandWithArguments = x__parameters__to__command__array(command)
     result = Result()
-    try:
-        child= subprocess.run(commandWithArguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        result.stdOut = child.stdout.decode('utf-8')
-        result.stdErr = child.stderr.decode('utf-8')
-        result.returnCode = child.returncode
-    except FileNotFoundError:
-        result.stdErr = "'"+commandWithArguments[0]+"': No such file or directory"
-        result.returnCode = 127
 
-    if result.returnCode != 0:
-        if 'setE' in globals():
-            if setE:
-                print(result.stdErr)
-                exit(result.returnCode)
+    prev_proc = subprocess.Popen(commandWithArguments[0], stdout=subprocess.PIPE)
+
+    for args in commandWithArguments[1:]:
+
+       proc = subprocess.Popen(args, stdin=prev_proc.stdout, stdout=subprocess.PIPE)
+       prev_proc.stdout.close()
+       prev_proc = proc
+
+    (result.stdOut, result.stdErr) = prev_proc.communicate()
+
+    result.returnCode = prev_proc.returncode
+    if result.stdOut:
+        result.stdOut = result.stdOut.decode("utf-8")
+    else:
+        result.stdOut = ""
+
+    if result.stdErr:
+        result.stdErr = result.stdErr.decode("utf-8")
+    else:
+        result.stdErr = ""
 
     return result
-
-
-
-setE = True
-r = x(['ls','-la'])
-print(r)
-print("-------------------")
 
